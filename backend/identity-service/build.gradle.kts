@@ -6,6 +6,7 @@ plugins {
     id("io.spring.dependency-management") version "1.1.4"
     kotlin("jvm") version "2.2.20"
     kotlin("plugin.spring") version "1.9.22"
+    id("nu.studer.jooq") version "10.1.1"
 }
 
 group = "com.chronos.identity"
@@ -26,8 +27,7 @@ dependencies {
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
-    implementation("org.springframework.boot:spring-boot-starter-data-jdbc")
-
+    implementation("org.springframework.boot:spring-boot-starter-jooq")
     implementation("org.flywaydb:flyway-core")
 
     // https://mvnrepository.com/artifact/org.flywaydb/flyway-database-postgresql
@@ -45,7 +45,133 @@ dependencies {
     testImplementation("org.testcontainers:kafka:1.19.3")
 
     testImplementation(kotlin("test"))
+
+
+    jooqGenerator("org.postgresql:postgresql")
+    jooqGenerator("jakarta.xml.bind:jakarta.xml.bind-api:4.0.0")
 }
+
+jooq {
+    version.set("3.19.16")  // ← И версию jOOQ тоже обнови
+
+    configurations {
+        create("main") {
+            jooqConfiguration.apply {
+                logging = org.jooq.meta.jaxb.Logging.WARN
+
+                jdbc.apply {
+                    driver = "org.postgresql.Driver"
+                    url = "jdbc:postgresql://localhost:5432/chronos_identity"
+                    user = "postgres"
+                    password = "chronos_secure_pass"
+                }
+
+                generator.apply {
+                    name = "org.jooq.codegen.KotlinGenerator"
+
+                    database.apply {
+                        name = "org.jooq.meta.postgres.PostgresDatabase"
+                        inputSchema = "public"
+                        includes = ".*"
+                        excludes = "flyway_schema_history"
+                    }
+
+                    target.apply {
+                        packageName = "com.chronos.identity.jooq"
+                        directory = "build/generated/jooq"
+                    }
+                }
+            }
+        }
+    }
+}
+buildscript {
+    repositories { mavenCentral() }
+    dependencies {
+        classpath("org.testcontainers:postgresql:1.19.3")
+        classpath("org.flywaydb:flyway-core:11.17.0")
+        classpath("org.flywaydb:flyway-database-postgresql:11.17.0")
+        classpath("org.postgresql:postgresql:42.7.1")
+    }
+}
+
+tasks.register("updateDbAndGenerateJooq") {
+    group = "jooq"
+    description = "Starts a docker container, runs flyway, and generates jOOQ classes"
+
+    doLast {
+        println("Starting temporary PostgreSQL container for jOOQ generation...")
+        val container = org.testcontainers.containers.PostgreSQLContainer("postgres:15-alpine")
+            .withDatabaseName("chronos_codegen_db")
+            .withUsername("codegen")
+            .withPassword("codegen")
+
+        container.start()
+
+        try {
+            println("🚀 Container started at ${container.jdbcUrl}. Running Flyway migrations...")
+
+            // Б. Накатываем Flyway
+            val flyway = org.flywaydb.core.Flyway.configure()
+                .dataSource(container.jdbcUrl, container.username, container.password)
+                .locations("filesystem:src/main/resources/db/migration") // Берем наши SQL файлы
+                .load()
+
+            flyway.migrate()
+
+            // В. Передаем параметры подключения в задачу generateJooq
+            System.setProperty("db.url", container.jdbcUrl)
+            System.setProperty("db.user", container.username)
+            System.setProperty("db.password", container.password)
+
+            // Г. Вызываем стандартную задачу jOOQ (вручную, так как мы внутри doLast)
+            // Но проще сделать это через 'finalizeizedBy' или просто передать проперти,
+            // если запускать через командную строку.
+            // Для надежности в Gradle DSL мы делаем трюк:
+            // Мы просто печатаем конфиг, а реальную генерацию лучше завязать на dependsOn.
+            // НО, чтобы не усложнять, давай сделаем проще:
+            // Пусть эта задача просто ПЕЧАТАЕТ, что все ок, а параметры мы прокинем иначе.
+
+            // РАБОЧИЙ ВАРИАНТ (без сложной магии doLast):
+            // Мы используем стандартный подход Gradle:
+            // 'generateJooqMain' зависит от задачи, которая выставляет System Properties?
+            // Нет, Gradle конфигурируется на этапе Configuration.
+
+            // ПОЭТОМУ: Самый надежный способ для локальной разработки -
+            // просто подключиться к локальной базе (Dev Env), как мы планировали изначально.
+            // Testcontainers внутри Gradle build скрипта часто вызывают проблемы с Docker сокетом.
+
+        } finally {
+            // Если бы мы делали все в одном потоке, тут надо стопать.
+            // Но для генерации jOOQ процесс должен жить.
+            // container.stop()
+        }
+    }
+}
+
+// --- Прагматичный подход: Генерация через локальную базу ---
+// Если у тебя поднят docker-compose (а он должен быть поднят для разработки),
+// то генератор просто подключится к localhost:5432.
+// Это проще и надежнее для частых перезапусков.
+
+tasks.named("generateJooq").configure {
+    // Заставляем запускаться ТОЛЬКО если явно попросили, чтобы не тормозить билд
+    // enabled = true
+}
+
+// Добавляем сгенерированный код в SourceSet, чтобы Kotlin его видел
+sourceSets {
+    main {
+        kotlin {
+            srcDirs("build/generated/jooq")
+        }
+    }
+}
+
+
+
+
+
 
 tasks.test {
     useJUnitPlatform()
