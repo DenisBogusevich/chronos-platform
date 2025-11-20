@@ -2,11 +2,12 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    id("org.springframework.boot") version "3.2.2"
-    id("io.spring.dependency-management") version "1.1.4"
+    id("org.springframework.boot") version "3.4.0"  // ← Обнови
+    id("io.spring.dependency-management") version "1.1.6"  // ← Обнови
     kotlin("jvm") version "2.2.20"
-    kotlin("plugin.spring") version "1.9.22"
-    id("nu.studer.jooq") version "10.1.1"
+    kotlin("plugin.spring") version "2.2.20"  // ← Синхронизируй с kotlin jvm
+    id("nu.studer.jooq") version "9.0"  // ← Вернись на 9.0
+    id("org.flywaydb.flyway") version "10.21.0"
 }
 
 group = "com.chronos.identity"
@@ -49,6 +50,13 @@ dependencies {
 
     jooqGenerator("org.postgresql:postgresql")
     jooqGenerator("jakarta.xml.bind:jakarta.xml.bind-api:4.0.0")
+}
+
+flyway {
+    url = "jdbc:postgresql://localhost:5432/chronos_identity"
+    user = "postgres"
+    password = "chronos_secure_pass"
+    locations = arrayOf("filesystem:src/main/resources/db/migration")
 }
 
 jooq {

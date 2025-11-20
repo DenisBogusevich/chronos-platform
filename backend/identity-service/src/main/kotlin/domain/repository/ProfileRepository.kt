@@ -2,6 +2,7 @@ package com.chronos.identity.domain.repository
 
 import com.chronos.core.api.event.discovery.ProfileDiscoveredEvent
 import com.chronos.core.common.abstraction.serializer.ChronosSerializer
+import com.chronos.identity.jooq.tables.references.PROFILES
 import org.jooq.DSLContext
 import org.jooq.JSONB
 import org.jooq.impl.DSL

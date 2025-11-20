@@ -1,0 +1,9 @@
+version: '3.8'
+services:
+  chronos_identity:
+    image: timescale/timescaledb-ha:pg15
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: chronos_secure_pass
+      POSTGRES_DB: chronos_identity
