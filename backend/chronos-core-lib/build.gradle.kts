@@ -1,9 +1,10 @@
 plugins {
     kotlin("jvm") version "2.2.20"
+    `maven-publish`
 }
 
 group = "com.chronos.core"
-version = "1.0-SNAPSHOT"
+version = "0.0.1-ALPHA"
 
 repositories {
     mavenCentral()
@@ -24,5 +25,13 @@ tasks.test {
     useJUnitPlatform()
 }
 kotlin {
-    jvmToolchain(24)
+    jvmToolchain(21)
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            from(components["java"])
+        }
+    }
 }
